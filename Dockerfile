@@ -23,10 +23,14 @@ WORKDIR /app
 
 COPY --from=builder --chown=65532:65532 /app ./
 
+# Explicit, though this image already defaults to this uid - stated
+# here so it doesn't depend on hidden knowledge of the base image.
+USER 65532
+
 EXPOSE 8080
 
-# Base image's ENTRYPOINT is already ["/nodejs/bin/node"]; CMD supplies the
-# script argument. Already runs as uid 65532 (nonroot) by default.
+# Base image's ENTRYPOINT is already ["/nodejs/bin/node"]; CMD supplies
+# the script argument.
 CMD ["app.js"]
 
 # No HEALTHCHECK: Kubernetes liveness/readiness probes own health checking.
