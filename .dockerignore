@@ -4,3 +4,7 @@ node_modules
 *.md
 Dockerfile
 .dockerignore
+terraform
+helm
+docs
+.github
