@@ -25,11 +25,14 @@ data "aws_iam_policy_document" "github_actions_trust" {
     }
 
     # Scoped to this exact repo, main branch only - matches the CI
-    # workflow's push job, which only runs on push to main.
+    # workflow's push job, which only runs on push to main. Uses
+    # GitHub's immutable subject claim format (owner/repo IDs, not
+    # names) - resistant to a repo rename/transfer hijack, unlike a
+    # name-based sub condition.
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:harel2320-dev/sample-nodejs:ref:refs/heads/main"]
+      values   = ["repo:harel2320-dev@337403435/sample-nodejs@1435070167:ref:refs/heads/main"]
     }
   }
 }
