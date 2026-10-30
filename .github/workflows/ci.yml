@@ -9,7 +9,31 @@ on:
 permissions:
   contents: read
 
+env:
+  ECR_REPOSITORY: 027401589554.dkr.ecr.il-central-1.amazonaws.com/sample-nodejs
+  AWS_REGION: il-central-1
+
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      image: ${{ steps.filter.outputs.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            image:
+              - 'app.js'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'Dockerfile'
+              - '.dockerignore'
+
   sast:
     name: SAST (Semgrep)
     runs-on: ubuntu-latest
@@ -22,7 +46,11 @@ jobs:
 
   build-and-scan:
     name: Build image & Trivy scan
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -39,12 +67,44 @@ jobs:
           exit-code: "1"
           scanners: vuln
 
+      # Image only leaves this job as a build artifact, never with AWS
+      # credentials present - the push job (separate runner, no app
+      # build-time code ever executed on it) is the only place OIDC
+      # credentials get requested.
+      - name: Save image for the push job
+        run: docker save sample-nodejs:${{ github.sha }} -o /tmp/image.tar
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-${{ github.sha }}
+          path: /tmp/image.tar
+          retention-days: 1
+
   push:
     name: Push to registry
     needs: [sast, build-and-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
-      # Deferred: AWS/ECR push needs an OIDC trust + IAM role, not yet
-      # provisioned (no AWS infra exists yet). See DECISIONS.md.
-      - run: echo "AWS/ECR push deferred - OIDC trust not yet provisioned."
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: image-${{ github.sha }}
+          path: /tmp
+
+      - name: Load image
+        run: docker load -i /tmp/image.tar
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::027401589554:role/sample-nodejs-github-actions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      - name: Tag and push
+        run: |
+          docker tag sample-nodejs:${{ github.sha }} ${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          docker push ${{ env.ECR_REPOSITORY }}:${{ github.sha }}
