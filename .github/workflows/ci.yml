@@ -108,3 +108,52 @@ jobs:
         run: |
           docker tag sample-nodejs:${{ github.sha }} ${{ env.ECR_REPOSITORY }}:${{ github.sha }}
           docker push ${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
+  update-gitops:
+    name: Bump image tag in GitOps repo
+    needs: push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # Short-lived (~1hr) installation token, scoped only to
+      # sample-nodejs-gitops - the long-lived App private key never
+      # leaves this step, only this derived token is used below.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.GITOPS_APP_ID }}
+          private-key: ${{ secrets.GITOPS_APP_PRIVATE_KEY }}
+          owner: harel2320-dev
+          repositories: sample-nodejs-gitops
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: harel2320-dev/sample-nodejs-gitops
+          token: ${{ steps.app-token.outputs.token }}
+          path: gitops
+
+      - name: Bump image tag
+        working-directory: gitops
+        run: |
+          sed -i "s/tag: .*/tag: \"${{ github.sha }}\"/" sample-nodejs/values.yaml
+
+      - name: Commit
+        id: commit
+        working-directory: gitops
+        run: |
+          git config user.name "sample-nodejs-gitops-ci[bot]"
+          git config user.email "sample-nodejs-gitops-ci[bot]@users.noreply.github.com"
+          git add sample-nodejs/values.yaml
+          if git diff --cached --quiet; then
+            echo "No change - tag already up to date."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Deploy sample-nodejs ${{ github.sha }}"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push
+        if: steps.commit.outputs.changed == 'true'
+        working-directory: gitops
+        run: git push
