@@ -14,19 +14,23 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write # action files a GitHub issue per finding set
     steps:
       # Each of our two real public routes scanned separately - our
       # responses are plain text with no HTML links between them, so
       # ZAP's spider can't discover one route from the other, and the
       # bare root 404s (no handler for "/"). Scanning each target
       # directly still runs ZAP's full passive rule set against it.
+      #
+      # allow_issue_writing is off: this repo has Issues disabled, so
+      # the action's attempt to file one 410s - noise, not a real
+      # failure. fail_action + the uploaded report artifact are the
+      # actual alert mechanism.
       - name: Scan /my-app
         uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
           target: 'https://sample-nodejs.catsweather.online/my-app'
           fail_action: true
-          issue_title: 'ZAP Scan Baseline Report - /my-app'
+          allow_issue_writing: false
           artifact_name: 'zap_scan_my-app'
 
       - name: Scan /about
@@ -34,5 +38,5 @@ jobs:
         with:
           target: 'https://sample-nodejs.catsweather.online/about'
           fail_action: true
-          issue_title: 'ZAP Scan Baseline Report - /about'
+          allow_issue_writing: false
           artifact_name: 'zap_scan_about'
