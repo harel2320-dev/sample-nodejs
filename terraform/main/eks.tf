@@ -39,5 +39,33 @@ module "eks" {
       max_size       = 2
       desired_size   = 2
     }
+
+    # Isolates high-privilege platform tooling (ArgoCD, ALB controller)
+    # from the app workload - a compromised app pod shares a node (kernel,
+    # node-level IAM/Pod Identity credential access) with whatever else
+    # runs there. Tainted so only pods with a matching toleration land
+    # here; nothing schedules here by default.
+    platform = {
+      ami_type       = "AL2023_x86_64_STANDARD"
+      instance_types = ["t3.small"]
+      min_size       = 1
+      max_size       = 1
+      desired_size   = 1
+
+      # Stable label for nodeSelector - unlike eks.amazonaws.com/nodegroup
+      # (which embeds a random suffix that changes if this node group is
+      # ever replaced), this value never changes.
+      labels = {
+        role = "platform"
+      }
+
+      taints = {
+        critical_addons = {
+          key    = "CriticalAddonsOnly"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        }
+      }
+    }
   }
 }
