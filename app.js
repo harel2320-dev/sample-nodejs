@@ -1,8 +1,11 @@
 const express = require('express');
+const helmet = require('helmet');
 const promClient = require('prom-client');
 
 const app = express();
 const port = process.env.PORT || 8080;
+
+app.use(helmet());
 
 // Create a Registry to register the metrics
 const register = new promClient.Registry();
