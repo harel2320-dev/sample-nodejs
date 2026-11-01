@@ -7,62 +7,41 @@ GitHub Actions (SAST + image scan) → ECR → ArgoCD → Kubernetes, with Terra
 
 ## Overview
 
-Express web server with Prometheus metrics, readiness/liveness probes, and
-security response headers (`helmet`). Built to demonstrate a complete,
-defensible DevSecOps pipeline — every tool and configuration choice here was
-made deliberately, not defaulted to.
+Express app, demonstrating a defensible DevSecOps pipeline end to end.
 
-| Endpoint | Purpose | Public |
-|---|---|---|
-| `/my-app` | Main route | Yes |
-| `/about` | App info | Yes |
-| `/ready`, `/live` | K8s probes | No (kubelet only) |
-| `/metrics` | Prometheus | No |
-| `/classified` | Demo route | No |
+| Endpoint | Purpose |
+|---|---|
+| `/my-app` | Main route |
+| `/about` | App info |
+| `/ready`, `/live` | K8s probes (kubelet only) |
 
 ## Architecture
 
 ```
-Developer → GitHub Actions (SAST, Trivy) → ECR
-                                          ↓
-                          sample-nodejs-gitops repo (image tag)
-                                          ↓
-                                       ArgoCD → EKS
+Developer → GitHub Actions (SAST, Trivy) → ECR → sample-nodejs-gitops (image tag) → ArgoCD → EKS
 ```
 
-This repo holds app source, CI pipeline, and AWS infrastructure (Terraform)
-only — nothing Kubernetes-side. All deployment config lives in
-[sample-nodejs-gitops](https://github.com/harel2320-dev/sample-nodejs-gitops):
-
-- `platform/` — cluster-wide tooling (ArgoCD, ALB controller), installed once, not tied to any single app.
-- `apps/sample-nodejs/` — this app's full Helm chart plus its ArgoCD `Application` CR. CI only ever touches `apps/sample-nodejs/values.yaml` (the image tag), via a short-lived, repo-scoped GitHub App token.
-
-Structured to scale to a second app later (`apps/<name>/`, sharing the same `platform/`) without reshaping anything.
+This repo: app source, CI, AWS infra (Terraform). K8s/ArgoCD config lives in
+[sample-nodejs-gitops](https://github.com/harel2320-dev/sample-nodejs-gitops)
+(`platform/` = cluster-wide tooling, `apps/sample-nodejs/` = this app's Helm
+chart + Application CR — CI only touches its `values.yaml` image tag, via a
+short-lived GitHub App token).
 
 ## Tech stack
 
-- **App:** Node.js 22.1.0, Express, prom-client, helmet
-- **Container:** multi-stage build → distroless, non-root, read-only root filesystem
-- **Orchestration:** AWS EKS (two node groups — app workload, and a tainted platform group isolating ArgoCD/ALB-controller from it)
-- **Deployment:** Helm + ArgoCD (GitOps), config in a separate repo
-- **Infrastructure:** Terraform (VPC, EKS, ECR, Route53, ACM, IAM)
-- **CI/CD:** GitHub Actions, OIDC to AWS (no static credentials)
+Node.js 22.1.0 / Express · multi-stage distroless container, non-root,
+read-only rootfs · AWS EKS (tainted platform node group isolates
+ArgoCD/ALB-controller) · Helm + ArgoCD (GitOps) · Terraform (VPC, EKS, ECR,
+Route53, ACM, IAM) · GitHub Actions with OIDC to AWS (no static credentials)
 
 ## Security
 
-- **SAST:** Semgrep, blocks the PR on findings.
-- **Image scanning:** Trivy, blocks on HIGH/CRITICAL before push.
-- **DAST:** OWASP ZAP baseline scan against the live app (scheduled + on-demand).
-- **Dependencies:** Dependabot alerts + security updates.
-- **Secrets:** GitHub push protection enabled; no static cloud credentials anywhere in the pipeline — GitHub Actions authenticates to AWS via OIDC, and to the GitOps repo via a short-lived, repo-scoped GitHub App token.
-- **Runtime:** non-root, read-only root filesystem, dedicated namespace, least-privilege IAM (EKS Pod Identity), TLS at the edge (ACM + ALB).
-
-## Local development
-
-```bash
-npm ci
-npm start   # http://localhost:8080
-```
+- **SAST:** Semgrep, blocks PR on findings.
+- **Image scan:** Trivy, blocks on HIGH/CRITICAL before push.
+- **DAST:** OWASP ZAP baseline scan (scheduled + on-demand).
+- **Dependencies:** Dependabot alerts + updates.
+- **Secrets:** GitHub push protection; no static cloud creds — OIDC to AWS, short-lived GitHub App token to the GitOps repo.
+- **Runtime:** non-root, read-only rootfs, dedicated namespace, least-privilege IAM (Pod Identity), TLS at the edge (ACM + ALB).
 
 ## Repository layout
 
@@ -73,5 +52,4 @@ terraform/                 AWS infrastructure (bootstrap + main)
 .github/workflows/         CI (ci.yml) and DAST (dast.yml)
 ```
 
-Kubernetes/ArgoCD config lives entirely in
-[sample-nodejs-gitops](https://github.com/harel2320-dev/sample-nodejs-gitops).
+K8s/ArgoCD config: [sample-nodejs-gitops](https://github.com/harel2320-dev/sample-nodejs-gitops).
