@@ -136,7 +136,7 @@ jobs:
       - name: Bump image tag
         working-directory: gitops
         run: |
-          sed -i "s/tag: .*/tag: \"${{ github.sha }}\"/" sample-nodejs/values.yaml
+          sed -i "s/tag: .*/tag: \"${{ github.sha }}\"/" apps/sample-nodejs/values.yaml
 
       - name: Commit
         id: commit
@@ -144,7 +144,7 @@ jobs:
         run: |
           git config user.name "sample-nodejs-gitops-ci[bot]"
           git config user.email "sample-nodejs-gitops-ci[bot]@users.noreply.github.com"
-          git add sample-nodejs/values.yaml
+          git add apps/sample-nodejs/values.yaml
           if git diff --cached --quiet; then
             echo "No change - tag already up to date."
             echo "changed=false" >> "$GITHUB_OUTPUT"
